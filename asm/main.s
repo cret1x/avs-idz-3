@@ -87,6 +87,30 @@ _start:
     mov rax, offset msg_enter_float
     call console_write_string
     call console_read_float
+    finit
+    movq double_buffer, xmm0
+    fld qword ptr [double_buffer]
+    mov rax, double_upper_limit
+    movq double_buffer, rax
+    fild qword ptr [double_buffer]
+    fcomip
+    fstp ST(0)
+    ja .ci_next
+    mov rax, offset msg_warning
+    call console_write_string
+    jmp .ci_next2
+    .ci_next:
+    movq double_buffer, xmm0
+    fld qword ptr [double_buffer]
+    mov rax, double_lower_limit
+    movq double_buffer, rax
+    fild qword ptr [double_buffer]
+    fcomip
+    fstp ST(0)
+    jbe .ci_next2
+    mov rax, offset msg_warning
+    call console_write_string
+    .ci_next2:
     mov rax, offset msg_gen_float
     call console_write_string
     call console_write_float
