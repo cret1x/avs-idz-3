@@ -286,9 +286,14 @@ console_write_big_string:
     pop rbx
     ret
 
+# output: rax - error code
 # output: xmm0 - float number
 console_read_float:
+    call console_read_string
+    mov rax, offset _str_buffer
+    call string_to_float
     ret
+
 
 # input: xmm0 - float number to print
 console_write_float:
@@ -334,10 +339,6 @@ console_write_float:
     je .cwf_pos
     not rax
     add rax, 1
-    push rax
-    mov rax, '-'
-    call console_write_char
-    pop rax
     .cwf_pos:
     push rax
     mov rax, rdx
@@ -413,12 +414,9 @@ file_write_float:
     not rax
     add rax, 1
     push rax
-
-   
     mov rax, r12
     mov rbx, '-'
     call file_write_char
-
     pop rax
     .fwf_pos:
     push rax
@@ -434,11 +432,9 @@ file_write_float:
     mov rbx, offset _str_buffer
     call file_write_line
     pop rcx
-
     mov rax, r12
     mov rbx, '.'
     call file_write_char
-
     cmp rcx, 16
     jge .fwf_ok
     sub rcx, 16

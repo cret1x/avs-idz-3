@@ -1,5 +1,9 @@
     .intel_syntax noprefix
-
+    .bss
+    .lcomm integer_part, 8
+    .lcomm decimal_part, 8
+    .lcomm temp, 4
+    .lcomm double_buffer, 8
     .text
     .global string_to_number
     .global string_to_float
@@ -300,8 +304,83 @@ number_to_string:
         pop r12
         ret
 
+# input: rax - string buffer
+# output: xmm0 - float number
 string_to_float:
-    ret
+    push rbx
+    push rcx
+    push rdx
+    push rsi
+    mov rbx, rax
+    mov rax, rbx
+    call get_string_length
+    mov rdx, rax
+    xor rcx, rcx
+    xor rsi, rsi
+    .crf_loop_int:
+        cmp rcx, rdx
+        jge .crf_loop_exit
+        mov al, '.'
+        cmp al, byte ptr [rbx + rcx]
+        je .crf_loop_dec
+        mov al, byte ptr [rbx + rcx]
+        mov [integer_part + rcx], al
+        inc rcx
+        jmp .crf_loop_int
+    .crf_loop_dec:
+        cmp rcx, rdx
+        jge .crf_loop_exit
+        mov al, '.'
+        cmp al, byte ptr [rbx + rcx]
+        je .crf_ld_1
+        mov al, byte ptr [rbx + rcx]
+        mov [decimal_part + rsi], al
+        inc rsi
+        .crf_ld_1:
+        inc rcx
+        jmp .crf_loop_dec
+    .crf_loop_exit:
+        mov rax, offset decimal_part
+        call get_string_length
+        mov rdx, rax
+        mov rax, offset decimal_part
+        call string_to_number
+        movq double_buffer, rax
+        mov rax, 10
+        mov rbx, rdx
+        call pow
+        finit
+        fild qword ptr [double_buffer]
+        movq double_buffer, rax
+        fild qword ptr [double_buffer]
+        fdivp
+        mov rax, offset integer_part
+        call string_to_number
+        cmp rax, 0
+        jge .crf_pos
+        neg rax
+        movq double_buffer, rax
+        fild qword ptr [double_buffer]
+        faddp
+        fchs
+        fstp qword ptr [double_buffer]
+        movq xmm0, double_buffer
+        pop rsi
+        pop rdx
+        pop rcx
+        pop rbx
+        ret
+        .crf_pos:
+        movq double_buffer, rax
+        fild qword ptr [double_buffer]
+        faddp
+        fstp qword ptr [double_buffer]
+        movq xmm0, double_buffer
+        pop rsi
+        pop rdx
+        pop rcx
+        pop rbx
+        ret
 
 # input: xmm0 - float number
 # input: rbx - string buffer

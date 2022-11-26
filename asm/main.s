@@ -2,7 +2,8 @@
     .bss
     .lcomm _out_fname, 128
     .equ _string_limit, 4096
-    .equ _string_big_limit, 134217728
+    .equ double_upper_limit, 6
+    .equ double_lower_limit, -6
     .lcomm double_buffer, 8
     .lcomm double_ex, 8
     .lcomm double_ex2, 8
@@ -39,6 +40,10 @@ msg_value:
     .string "Value: "
 msg_err:
     .string "Error while opening a file: "
+msg_inv_float:
+    .string "Wrong float number format\n"
+msg_warning:
+    .string "Preffered range is [-6;6]. Accuracy might be lower than expected!\n"
 msg_time:
     .string "Elapsed time:  \n"
 msg_time_read:
@@ -81,8 +86,12 @@ _start:
 .console_input:
     mov rax, offset msg_enter_float
     call console_write_string
-    call console_read_number
-    mov r12, rax
+    call console_read_float
+    mov rax, offset msg_gen_float
+    call console_write_string
+    call console_write_float
+    call console_new_line
+    movq r12, xmm0
     mov r15, 0
     jmp .do_task
 
@@ -95,14 +104,25 @@ _start:
     mov rax, 32[rsp]                            # get upper rand value
     call string_to_number
     mov rbx, rax
+    cmp rbx, double_upper_limit
+    jle .ri_next
+    mov rax, offset msg_warning
+    call console_write_string
+    jmp .ri_next2
+    .ri_next:
+    cmp rcx, double_lower_limit
+    jge .ri_next2
+    mov rax, offset msg_warning
+    call console_write_string
+    .ri_next2:
     mov rax, rcx
     call get_random_number
-    mov r12, rax                                # store x in r12
+    cvtsi2sd xmm0, rax
+    movq r12, xmm0                                # store x in r12
     mov r15, 0
     mov rax, offset msg_gen_float
     call console_write_string
-    mov rax, rcx
-    call console_write_number
+    call console_write_float
     call console_new_line
     jmp .do_task
 
@@ -123,9 +143,12 @@ _start:
     push rax                            # push file descriptor
     call file_read_line                 # read x value from file
     mov rax, offset _str_buffer
-    call string_to_number
-
-    mov r12, rax                        # store x in r12
+    call string_to_float
+    mov rax, offset msg_gen_float
+    call console_write_string
+    call console_write_float
+    call console_new_line
+    movq r12, xmm0                        # store x in r12
     pop rax
     call file_close
 
@@ -141,34 +164,28 @@ _start:
 
     
 .do_task:
-    mov r13, r12
-    neg r13                             # store in r13 -x value
     lea rax, CalcStartTime[rip]
     call time_now
 
-    # TODO ch(x) = (e^x + e^(-x))/2
-    
+    mov r13, r12
+    finit
+    movq double_buffer, r13
+    fld qword ptr [double_buffer]
+    fchs                                        # store in r13 -x value
+    fstp qword ptr [double_buffer]
+    movq r13, double_buffer
+                           
     xor rcx, rcx
     .do_task_loop:
         cmp rcx, 20
         jge .do_task_exit
         
         finit                                   # e^x
-        /*
-        movq double_buffer, r12                 # convert int to double
-        fild qword ptr [double_buffer]
-        fstp qword ptr [double_buffer]
-        movq xmm0, double_buffer
+        movq xmm0, r12
         mov rax, rcx
         call pow_double
         movq double_buffer, xmm0
-        finit
-        */
-        mov rax, r12
-        mov rbx, rcx
-        call pow
-        movq double_buffer, rax
-        fild qword ptr [double_buffer]
+        fld qword ptr [double_buffer]
         mov rax, rcx
         call factorial
         mov r14, rax                            # save factorial result
@@ -176,34 +193,9 @@ _start:
         fild qword ptr [double_buffer]
         fdivp
         fstp qword ptr [double_ex]
-        
-        
-        finit                                   # e^-x
-        /*
-        movq double_buffer, r13                 # convert int to double
-        fild qword ptr [double_buffer]
-        fstp qword ptr [double_buffer]
-        movq xmm0, double_buffer
-        mov rax, rcx
-        call pow_double
-        movq double_buffer, xmm0
-        finit
-        */
-        mov rax, r13
-        mov rbx, rcx
-        call pow
-        movq double_buffer, rax
-        fild qword ptr [double_buffer]
-
-        movq double_buffer, r14
-        fild qword ptr [double_buffer]
-        fdivp
-        fstp qword ptr [double_ex2]
 
         finit
         fld qword ptr [double_ex]
-        fld qword ptr [double_ex2]
-        faddp
         fld qword ptr [double_sum_buffer]
         faddp
         fstp qword ptr [double_sum_buffer]
@@ -215,8 +207,8 @@ _start:
         fstp qword ptr [double_delta]
         movq xmm0, double_sum_buffer
         movq double_sum_buffer_prev, xmm0
-        mov rax, ' '
-        call console_write_char
+
+        
         mov rax, offset msg_delta
         call console_write_string
         movq xmm0, double_delta
@@ -232,14 +224,6 @@ _start:
         add rcx, 2
         jmp .do_task_loop
     .do_task_exit:
-
-    finit                                   # e^x + e^-x / 2
-    mov rax, 2
-    movq double_buffer, rax
-    fld qword ptr [double_sum_buffer]
-    fild qword ptr [double_buffer]
-    fdivp
-    fstp qword ptr [double_sum_buffer]
 
     lea rax, CalcEndTime[rip]
     call time_now
@@ -343,6 +327,11 @@ _start:
     mov rax, rdx
     call console_write_string
     call console_new_line
+    jmp exit
+
+.inv_float:
+    mov rax, offset msg_inv_float
+    call console_write_string
     jmp exit
 
 inv_args_count:

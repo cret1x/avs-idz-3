@@ -57,6 +57,7 @@ factorial:
     .close:
         pop rbx
         ret
+
 # input: xmm0 - real number
 # input: rax - integer power
 # output: xmm0 - result
@@ -69,21 +70,23 @@ pow_double:
     movq xmm0, double_buffer
     ret
     .pow_double_nxt:
+    push rcx
     finit
-    movq double_buffer, rax
-    fild qword ptr [double_buffer]
     movq double_buffer, xmm0
     fld qword ptr [double_buffer]
     fabs
-
-    fyl2x
-    fld1
-    fld ST(1)
-    fprem1
-    f2xm1
-    faddp ST(1)
-    fscale
-    ffree ST(1)
+    fstp qword ptr [double_buffer]
+    fld qword ptr [double_buffer]
+    xor rcx, rcx
+    inc rcx
+    .pd_loop:
+        cmp rcx, rax
+        jge .pdl_exit
+        fld qword ptr [double_buffer]
+        fmulp
+        inc rcx
+        jmp .pd_loop
+    .pdl_exit:
     and ax, 0x0180
     cmp ax, 0x0180
     jne .pow_double_exit
@@ -91,4 +94,5 @@ pow_double:
     .pow_double_exit:
     fstp qword ptr [double_buffer]
     movq xmm0, double_buffer
+    pop rcx
     ret
