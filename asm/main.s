@@ -190,7 +190,7 @@ _start:
 .do_task:
     lea rax, CalcStartTime[rip]
     call time_now
-
+   
     mov r13, r12
     finit
     movq double_buffer, r13
@@ -198,7 +198,14 @@ _start:
     fchs                                        # store in r13 -x value
     fstp qword ptr [double_buffer]
     movq r13, double_buffer
-                           
+
+    xor r14, r14                                # counter for repeating main loop
+    .do_task_time_loop:
+    finit
+    fldz
+    fstp qword ptr [double_sum_buffer]
+    fldz
+    fstp qword ptr [double_sum_buffer_prev]                       
     xor rcx, rcx
     .do_task_loop:
         cmp rcx, 20
@@ -212,7 +219,6 @@ _start:
         fld qword ptr [double_buffer]
         mov rax, rcx
         call factorial
-        mov r14, rax                            # save factorial result
         movq double_buffer, rax
         fild qword ptr [double_buffer]
         fdivp
@@ -232,7 +238,8 @@ _start:
         movq xmm0, double_sum_buffer
         movq double_sum_buffer_prev, xmm0
 
-        
+        cmp r15, 0
+        jg .dtln
         mov rax, offset msg_delta
         call console_write_string
         movq xmm0, double_delta
@@ -244,11 +251,17 @@ _start:
         movq xmm0, double_sum_buffer
         call console_write_float
         call console_new_line
-        
+        .dtln:
         add rcx, 2
         jmp .do_task_loop
     .do_task_exit:
-
+    debug:
+    cmp r15, 0
+    je .dttl_exit
+    inc r14
+    cmp r14, 10000000
+    jl .do_task_time_loop
+    .dttl_exit:
     lea rax, CalcEndTime[rip]
     call time_now
     cmp r15, 0
